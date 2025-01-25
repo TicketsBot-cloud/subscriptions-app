@@ -21,7 +21,7 @@ import (
 func DbConn(conf config.Config, logger *zap.Logger) *pgxpool.Pool {
 	cfg, err := pgxpool.ParseConfig(fmt.Sprintf(
 		"postgres://%s:%s@%s/%s?pool_max_conns=%d",
-		conf.Database.Host,
+		conf.Database.Username,
 		conf.Database.Password,
 		conf.Database.Host,
 		conf.Database.Database,
