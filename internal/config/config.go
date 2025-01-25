@@ -2,15 +2,24 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+
 	"github.com/caarlos0/env/v9"
 	"github.com/pkg/errors"
-	"os"
 )
 
 type Config struct {
 	ServerAddr     string  `env:"SERVER_ADDR,required" json:"server_address"`
 	ProductionMode bool    `env:"PRODUCTION_MODE" envDefault:"false" json:"production_mode"`
 	SentryDsn      *string `env:"SENTRY_DSN" json:"sentry_dsn"`
+
+	Database struct {
+		Host     string `env:"HOST"`
+		Database string `env:"NAME"`
+		Username string `env:"USER"`
+		Password string `env:"PASSWORD"`
+		Threads  int    `env:"THREADS"`
+	} `envPrefix:"DATABASE_"`
 
 	Discord struct {
 		PublicKey     string   `env:"PUBLIC_KEY,required" json:"public_key"`

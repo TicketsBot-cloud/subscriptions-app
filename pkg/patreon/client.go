@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/TicketsBot/subscriptions-app/internal/config"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
+
+	"github.com/TicketsBot/subscriptions-app/internal/config"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type Client struct {
@@ -20,13 +19,14 @@ type Client struct {
 	config      config.Config
 	logger      *zap.Logger
 	ratelimiter *rate.Limiter
+	db          *pgxpool.Pool
 
 	Tokens Tokens
 }
 
-const UserAgent = "ticketsbot.net/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
+const UserAgent = "ticketsbot.cloud/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
 
-func NewClient(config config.Config, logger *zap.Logger) *Client {
+func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Client {
 	return &Client{
 		httpClient: http.DefaultClient,
 		config:     config,
@@ -35,7 +35,25 @@ func NewClient(config config.Config, logger *zap.Logger) *Client {
 			rate.Every(time.Minute/time.Duration(config.Patreon.RequestsPerMinute)),
 			config.Patreon.RequestsPerMinute,
 		),
+		db: pool,
 	}
+}
+
+func (c *Client) RefreshCredentials(ctx context.Context) error {
+	var accessToken, refreshToken string
+	var expiresAt time.Time
+	if err := c.db.QueryRow(ctx, "SELECT access_token, refresh_token, expires FROM patreon_keys").Scan(&accessToken, &refreshToken, &expiresAt); err != nil {
+		c.logger.Error("Invalid access token or refresh token")
+		return err
+	}
+
+	c.Tokens = Tokens{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresAt:    expiresAt,
+	}
+
+	return nil
 }
 
 func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, error) {
@@ -113,7 +131,7 @@ func (c *Client) FetchPage(ctx context.Context, url string) (PledgeResponse, err
 	c.logger.Debug("Fetching page", zap.String("url", url))
 
 	if c.Tokens.ExpiresAt.Before(time.Now()) {
-		return PledgeResponse{}, fmt.Errorf("Can't refresh: refresh token has already expired (expired at %s)", c.Tokens.ExpiresAt.String())
+		return PledgeResponse{}, fmt.Errorf("can't refresh: refresh token has already expired (expired at %s)", c.Tokens.ExpiresAt.String())
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -163,139 +181,4 @@ func (c *Client) FetchPage(ctx context.Context, url string) (PledgeResponse, err
 	c.logger.Debug("Page fetched successfully", zap.String("url", url))
 
 	return body, nil
-}
-
-func (c *Client) GrantCredentials(ctx context.Context) (Tokens, error) {
-	c.logger.Info("Doing client_credentials grant")
-
-	uri := "https://www.patreon.com/api/oauth2/token"
-
-	form := &url.Values{}
-	form.Add("grant_type", "client_credentials")
-	form.Add("client_id", c.config.Patreon.ClientId)
-	form.Add("client_secret", c.config.Patreon.ClientSecret)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, strings.NewReader(form.Encode()))
-	if err != nil {
-		return Tokens{}, err
-	}
-
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("User-Agent", UserAgent)
-
-	if err := c.ratelimiter.Wait(ctx); err != nil {
-		return Tokens{}, err
-	}
-
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return Tokens{}, err
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			c.logger.Error(
-				"error reading body during token refresh",
-				zap.Int("status_code", res.StatusCode),
-				zap.Error(err),
-			)
-			return Tokens{}, err
-		}
-
-		c.logger.Error(
-			"Token grant returned non-OK status code",
-			zap.Int("status_code", res.StatusCode),
-			zap.String("body", string(body)),
-		)
-
-		return Tokens{}, fmt.Errorf("token grant returned %d status code", res.StatusCode)
-	}
-
-	var body RefreshResponse
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		return Tokens{}, err
-	}
-
-	tokens := Tokens{
-		AccessToken:  body.AccessToken,
-		RefreshToken: body.RefreshToken,
-		ExpiresAt:    time.Now().Add(time.Duration(body.ExpiresIn) * time.Second),
-	}
-
-	c.logger.Info("Token grant successful", zap.Time("expires_at", tokens.ExpiresAt))
-
-	c.Tokens = tokens
-	return tokens, nil
-}
-
-func (c *Client) DoRefresh(ctx context.Context) (Tokens, error) {
-	c.logger.Info("Doing token refresh")
-
-	if c.Tokens.ExpiresAt.Before(time.Now()) {
-		return Tokens{}, fmt.Errorf("Can't refresh: refresh token has already expired (expired at %s)", c.Tokens.ExpiresAt.String())
-	}
-
-	url := fmt.Sprintf(
-		"https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=%s&client_id=%s&client_secret=%s",
-		c.Tokens.RefreshToken,
-		c.config.Patreon.ClientId,
-		c.config.Patreon.ClientSecret,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
-	if err != nil {
-		return Tokens{}, err
-	}
-
-	req.Header.Add("User-Agent", UserAgent)
-
-	if err := c.ratelimiter.Wait(ctx); err != nil {
-		return Tokens{}, err
-	}
-
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return Tokens{}, err
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			c.logger.Error(
-				"error reading body during token refresh",
-				zap.Int("status_code", res.StatusCode),
-				zap.Error(err),
-			)
-			return Tokens{}, err
-		}
-
-		c.logger.Error(
-			"token refresh returned non-OK status code",
-			zap.Int("status_code", res.StatusCode),
-			zap.String("body", string(body)),
-		)
-
-		return Tokens{}, fmt.Errorf("token refresh returned %d status code", res.StatusCode)
-	}
-
-	var body RefreshResponse
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		return Tokens{}, err
-	}
-
-	tokens := Tokens{
-		AccessToken:  body.AccessToken,
-		RefreshToken: body.RefreshToken,
-		ExpiresAt:    time.Now().Add(time.Duration(body.ExpiresIn) * time.Second),
-	}
-
-	c.logger.Info("Token refresh successful", zap.Time("expires_at", tokens.ExpiresAt))
-
-	c.Tokens = tokens
-	return tokens, nil
 }
