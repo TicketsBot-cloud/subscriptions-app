@@ -1,5 +1,5 @@
 # Build container
-FROM golang:buster AS builder
+FROM golang:1.22 AS builder
 
 RUN apt-get update && apt-get upgrade -y && apt-get install -y ca-certificates git zlib1g-dev
 
