@@ -2,15 +2,48 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"time"
+
 	"github.com/TicketsBot/subscriptions-app/internal/config"
 	"github.com/TicketsBot/subscriptions-app/internal/server"
 	"github.com/TicketsBot/subscriptions-app/pkg/patreon"
 	"github.com/getsentry/sentry-go"
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"os"
-	"time"
+
+	_ "github.com/joho/godotenv/autoload"
 )
+
+func DbConn(conf config.Config, logger *zap.Logger) *pgxpool.Pool {
+	cfg, err := pgxpool.ParseConfig(fmt.Sprintf(
+		"postgres://%s:%s@%s/%s?pool_max_conns=%d",
+		conf.Database.Host,
+		conf.Database.Password,
+		conf.Database.Host,
+		conf.Database.Database,
+		conf.Database.Threads,
+	))
+
+	if err != nil {
+		logger.Fatal("Failed to parse database config", zap.Error(err))
+		return nil
+	}
+
+	// TODO: Sentry
+	cfg.ConnConfig.LogLevel = pgx.LogLevelWarn
+
+	pool, err := pgxpool.ConnectConfig(context.Background(), cfg)
+	if err != nil {
+		logger.Fatal("Failed to connect to database", zap.Error(err))
+		return nil
+	}
+
+	return pool
+}
 
 func main() {
 	conf, err := config.LoadConfig()
@@ -61,10 +94,12 @@ func main() {
 		panic(err)
 	}
 
-	patreonClient := patreon.NewClient(conf, logger.With(zap.String("component", "patreon_client")))
+	dbConn := DbConn(conf, logger)
+
+	patreonClient := patreon.NewClient(conf, logger.With(zap.String("component", "patreon_client")), dbConn)
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		_, err := patreonClient.GrantCredentials(ctx)
+		err := patreonClient.RefreshCredentials(ctx)
 		cancel()
 		if err == nil {
 			logger.Info("Granted credentials successfully")
@@ -121,11 +156,10 @@ func fetchPledges(
 		ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 		defer cancel()
 
-		tokens, err := patreonClient.DoRefresh(ctx)
-		if err != nil { // We can still continue if this fails
+		if err := patreonClient.RefreshCredentials(ctx); err != nil {
 			logger.Error("Failed to refresh token", zap.Error(err))
 		} else {
-			logger.Info("Tokens refreshed successfully", zap.Time("expires_at", tokens.ExpiresAt))
+			logger.Info("Tokens refreshed successfully")
 		}
 
 		cancel()
