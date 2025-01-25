@@ -2,8 +2,6 @@ module github.com/TicketsBot/subscriptions-app
 
 go 1.21
 
-toolchain go1.22.6
-
 require (
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/getsentry/sentry-go v0.31.1
