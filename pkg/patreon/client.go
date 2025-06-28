@@ -125,7 +125,7 @@ func (c *Client) RefreshCredentials(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, map[uint64]Patron, error) {
+func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, error) {
 	url := fmt.Sprintf(
 		"https://www.patreon.com/api/oauth2/v2/campaigns/%d/members?include=currently_entitled_tiers,user&fields%%5Bmember%%5D=last_charge_date,last_charge_status,patron_status,email,pledge_relationship_start&fields%%5Buser%%5D=social_connections",
 		c.config.Patreon.CampaignId,
@@ -133,11 +133,10 @@ func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, map[uint6
 
 	// Email -> Data
 	data := make(map[string]Patron)
-	idData := make(map[uint64]Patron)
 	for {
 		res, err := c.FetchPageWithTimeout(ctx, 10*time.Minute, url)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		for _, member := range res.Data {
@@ -179,14 +178,6 @@ func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, map[uint6
 				DiscordId:  discordId,
 			}
 
-			if discordId != nil {
-				idData[*discordId] = Patron{
-					Attributes: member.Attributes,
-					Id:         id,
-					Tiers:      tiers,
-					DiscordId:  discordId,
-				}
-			}
 		}
 
 		if res.Links == nil || res.Links.Next == nil {
@@ -196,7 +187,7 @@ func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, map[uint6
 		url = *res.Links.Next
 	}
 
-	return data, idData, nil
+	return data, nil
 }
 
 func (c *Client) FetchPageWithTimeout(ctx context.Context, timeout time.Duration, url string) (PledgeResponse, error) {

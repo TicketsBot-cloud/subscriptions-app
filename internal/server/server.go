@@ -39,14 +39,22 @@ func (s *Server) Run() error {
 	return router.Run(s.config.ServerAddr)
 }
 
-func (s *Server) UpdatePledges(pledges map[string]patreon.Patron, pledgesByDiscordId map[uint64]patreon.Patron) {
+func (s *Server) UpdatePledges(pledges map[string]patreon.Patron) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.pledges != nil {
 		s.pledges = pledges
 	}
-	if s.pledgesByDiscordId != nil {
-		s.pledgesByDiscordId = pledgesByDiscordId
+
+	// Group pledges by Discord ID
+	x := make(map[uint64]patreon.Patron, len(pledges))
+
+	for _, pledge := range pledges {
+		if pledge.DiscordId != nil {
+			x[*pledge.DiscordId] = pledge
+		}
 	}
+
+	s.pledgesByDiscordId = x
 }

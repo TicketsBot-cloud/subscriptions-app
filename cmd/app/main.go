@@ -99,16 +99,13 @@ func main() {
 	patreonClient := patreon.NewClient(conf, logger.With(zap.String("component", "patreon_client")), dbConn)
 
 	pledgeCh := make(chan map[string]patreon.Patron)
-	pledgeByIdCh := make(chan map[uint64]patreon.Patron)
-	go startPatreonLoop(context.Background(), logger, patreonClient, pledgeCh, pledgeByIdCh)
+	go startPatreonLoop(context.Background(), logger, patreonClient, pledgeCh)
 
 	server := server.NewServer(conf, logger.With(zap.String("component", "server")))
 
 	go func() {
 		for pledges := range pledgeCh {
-			for pledgesById := range pledgeByIdCh {
-				server.UpdatePledges(pledges, pledgesById)
-			}
+			server.UpdatePledges(pledges)
 		}
 	}()
 
@@ -117,9 +114,9 @@ func main() {
 	}
 }
 
-func startPatreonLoop(ctx context.Context, logger *zap.Logger, patreonClient *patreon.Client, ch chan map[string]patreon.Patron, idCh chan map[uint64]patreon.Patron) {
+func startPatreonLoop(ctx context.Context, logger *zap.Logger, patreonClient *patreon.Client, ch chan map[string]patreon.Patron) {
 	for {
-		fetchPledges(ctx, logger, patreonClient, ch, idCh)
+		fetchPledges(ctx, logger, patreonClient, ch)
 		time.Sleep(time.Minute)
 	}
 }
@@ -129,7 +126,6 @@ func fetchPledges(
 	logger *zap.Logger,
 	patreonClient *patreon.Client,
 	ch chan map[string]patreon.Patron,
-	idCh chan map[uint64]patreon.Patron,
 ) {
 	if patreonClient.Tokens.ExpiresAt.Before(time.Now()) {
 		logger.Fatal(
@@ -160,12 +156,11 @@ func fetchPledges(
 	ctx, cancel := context.WithTimeout(ctx, time.Hour)
 	defer cancel()
 
-	pledges, idPledges, err := patreonClient.FetchPledges(ctx)
+	pledges, err := patreonClient.FetchPledges(ctx)
 	if err != nil {
 		logger.Error("Failed to fetch pledges", zap.Error(err))
 		return
 	}
 
 	ch <- pledges
-	idCh <- idPledges
 }
