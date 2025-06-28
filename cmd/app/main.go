@@ -97,18 +97,6 @@ func main() {
 	dbConn := DbConn(conf, logger)
 
 	patreonClient := patreon.NewClient(conf, logger.With(zap.String("component", "patreon_client")), dbConn)
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		err := patreonClient.RefreshCredentials(ctx)
-		cancel()
-		if err == nil {
-			logger.Info("Granted credentials successfully")
-			break
-		} else {
-			logger.Error("Failed to grant credentials, retrying in 10s", zap.Error(err))
-			time.Sleep(time.Second * 10)
-		}
-	}
 
 	pledgeCh := make(chan map[string]patreon.Patron)
 	go startPatreonLoop(context.Background(), logger, patreonClient, pledgeCh)

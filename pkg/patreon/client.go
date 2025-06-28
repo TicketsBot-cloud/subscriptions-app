@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TicketsBot/subscriptions-app/internal/config"
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -24,9 +25,19 @@ type Client struct {
 	Tokens Tokens
 }
 
-const UserAgent = "ticketsbot.cloud/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
+const UserAgent = "tickets.bot/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
 
 func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Client {
+	// Get initial tokens from the database
+	var tokens Tokens
+	if err := pool.QueryRow(context.Background(), "SELECT access_token, refresh_token, expires FROM patreon_keys WHERE client_id = $1", config.Patreon.ClientId).Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt); err != nil {
+		if err != pgx.ErrNoRows {
+			logger.Error("Failed to get Patreon keys from database", zap.Error(err))
+			return nil
+		}
+		logger.Info("No Patreon keys found in database, will need to refresh them")
+	}
+
 	return &Client{
 		httpClient: http.DefaultClient,
 		config:     config,
@@ -36,21 +47,79 @@ func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Cl
 			config.Patreon.RequestsPerMinute,
 		),
 		db: pool,
+		Tokens: Tokens{
+			AccessToken:  tokens.AccessToken,
+			RefreshToken: tokens.RefreshToken,
+			ExpiresAt:    tokens.ExpiresAt,
+		},
 	}
 }
 
 func (c *Client) RefreshCredentials(ctx context.Context) error {
-	var accessToken, refreshToken string
-	var expiresAt time.Time
-	if err := c.db.QueryRow(ctx, "SELECT access_token, refresh_token, expires FROM patreon_keys").Scan(&accessToken, &refreshToken, &expiresAt); err != nil {
-		c.logger.Error("Invalid access token or refresh token")
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		fmt.Sprintf(
+			"https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=%s&client_id=%s&client_secret=%s",
+			c.Tokens.RefreshToken,
+			c.config.Patreon.ClientId,
+			c.config.Patreon.ClientSecret,
+		), nil)
+
+	if err != nil {
+		c.logger.Error("Failed to create request for refreshing Patreon credentials", zap.Error(err))
+		return err
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+
+	if err := c.ratelimiter.Wait(ctx); err != nil {
+		return err
+	}
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.Error("Failed to refresh Patreon credentials", zap.Error(err))
+		return err
+	}
+
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			c.logger.Error(
+				"error reading body of oauth response",
+				zap.Int("status_code", res.StatusCode),
+				zap.Error(err),
+			)
+			return err
+		}
+
+		c.logger.Error(
+			"oauth response returned non-OK status code",
+			zap.Int("status_code", res.StatusCode),
+			zap.String("body", string(body)),
+		)
+
+		return fmt.Errorf("pledge response returned %d status code", res.StatusCode)
+	}
+
+	var body RefreshResponse
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		c.logger.Error("Failed to decode Patreon refresh response", zap.Error(err))
 		return err
 	}
 
 	c.Tokens = Tokens{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresAt:    expiresAt,
+		AccessToken:  body.AccessToken,
+		RefreshToken: body.RefreshToken,
+		ExpiresAt:    time.Now().Add(time.Duration(body.ExpiresIn) * time.Second),
+	}
+
+	// Update db
+	if _, err := c.db.Exec(ctx, "UPDATE patreon_keys SET access_token = $1, refresh_token = $2, expires = $3 WHERE client_id = $4", c.Tokens.AccessToken, c.Tokens.RefreshToken, c.Tokens.ExpiresAt, c.config.Patreon.ClientId); err != nil {
+		c.logger.Error("Failed to update Patreon keys in database", zap.Error(err))
+		return fmt.Errorf("failed to update Patreon keys in database: %w", err)
 	}
 
 	return nil
@@ -108,6 +177,7 @@ func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, error) {
 				Tiers:      tiers,
 				DiscordId:  discordId,
 			}
+
 		}
 
 		if res.Links == nil || res.Links.Next == nil {

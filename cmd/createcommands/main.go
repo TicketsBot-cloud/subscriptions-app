@@ -4,8 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/rxdn/gdl/objects/interaction"
-	"github.com/rxdn/gdl/rest"
+
+	"github.com/TicketsBot-cloud/gdl/objects/interaction"
+	"github.com/TicketsBot-cloud/gdl/rest"
 )
 
 var commands = []rest.CreateCommandData{
@@ -17,7 +18,13 @@ var commands = []rest.CreateCommandData{
 				Type:        interaction.OptionTypeString,
 				Name:        "email",
 				Description: "The Patreon email address of the user to lookup",
-				Required:    true,
+				Required:    false,
+			},
+			{
+				Type:        interaction.OptionTypeUser,
+				Name:        "user",
+				Description: "The Discord Id of the user to lookup",
+				Required:    false,
 			},
 		},
 		Type: interaction.ApplicationCommandTypeChatInput,
