@@ -106,10 +106,9 @@ func main() {
 
 	go func() {
 		for pledges := range pledgeCh {
-			server.UpdatePledges(pledges, nil)
-		}
-		for pledgesById := range pledgeByIdCh {
-			server.UpdatePledges(nil, pledgesById)
+			for pledgesById := range pledgeByIdCh {
+				server.UpdatePledges(pledges, pledgesById)
+			}
 		}
 	}()
 

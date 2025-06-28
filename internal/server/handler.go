@@ -66,6 +66,7 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 			})
 		}
 
+		fmt.Println(s.pledges != nil, s.pledgesByDiscordId != nil)
 		hasInitialData := s.pledges != nil || s.pledgesByDiscordId != nil
 		if !hasInitialData {
 			return interaction.NewResponseChannelMessage(interaction.ApplicationCommandCallbackData{
