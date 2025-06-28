@@ -43,9 +43,7 @@ func (s *Server) UpdatePledges(pledges map[string]patreon.Patron) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.pledges != nil {
-		s.pledges = pledges
-	}
+	s.pledges = pledges
 
 	// Group pledges by Discord ID
 	x := make(map[uint64]patreon.Patron, len(pledges))
