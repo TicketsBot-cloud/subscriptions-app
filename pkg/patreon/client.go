@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TicketsBot/subscriptions-app/internal/config"
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -27,6 +28,16 @@ type Client struct {
 const UserAgent = "tickets.bot/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
 
 func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Client {
+	// Get initial tokens from the database
+	var tokens Tokens
+	if err := pool.QueryRow(context.Background(), "SELECT access_token, refresh_token, expires_at FROM patreon_keys WHERE client_id = $1", config.Patreon.ClientId).Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt); err != nil {
+		if err != pgx.ErrNoRows {
+			logger.Error("Failed to get Patreon keys from database", zap.Error(err))
+			return nil
+		}
+		logger.Info("No Patreon keys found in database, will need to refresh them")
+	}
+
 	return &Client{
 		httpClient: http.DefaultClient,
 		config:     config,
@@ -36,6 +47,11 @@ func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Cl
 			config.Patreon.RequestsPerMinute,
 		),
 		db: pool,
+		Tokens: Tokens{
+			AccessToken:  tokens.AccessToken,
+			RefreshToken: tokens.RefreshToken,
+			ExpiresAt:    tokens.ExpiresAt,
+		},
 	}
 }
 
