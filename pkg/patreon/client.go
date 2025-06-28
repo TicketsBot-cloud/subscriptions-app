@@ -38,6 +38,8 @@ func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Cl
 		logger.Info("No Patreon keys found in database, will need to refresh them")
 	}
 
+	fmt.Println(tokens)
+
 	return &Client{
 		httpClient: http.DefaultClient,
 		config:     config,
