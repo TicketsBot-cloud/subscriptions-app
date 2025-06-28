@@ -66,7 +66,7 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 			})
 		}
 
-		fmt.Println(s.pledges != nil, s.pledgesByDiscordId != nil)
+		s.logger.Info("Checking initial data state", zap.Bool("pledgesLoaded", s.pledges != nil), zap.Bool("discordIdMappingLoaded", s.pledgesByDiscordId != nil))
 		hasInitialData := s.pledges != nil || s.pledgesByDiscordId != nil
 		if !hasInitialData {
 			return interaction.NewResponseChannelMessage(interaction.ApplicationCommandCallbackData{
