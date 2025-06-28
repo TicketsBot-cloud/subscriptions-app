@@ -24,7 +24,7 @@ type Client struct {
 	Tokens Tokens
 }
 
-const UserAgent = "ticketsbot.cloud/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
+const UserAgent = "tickets.bot/subscriptions-app (https://github.com/TicketsBot/subscriptions-app)"
 
 func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Client {
 	return &Client{
@@ -42,7 +42,7 @@ func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Cl
 func (c *Client) RefreshCredentials(ctx context.Context) error {
 	var accessToken, refreshToken string
 	var expiresAt time.Time
-	if err := c.db.QueryRow(ctx, "SELECT access_token, refresh_token, expires FROM patreon_keys").Scan(&accessToken, &refreshToken, &expiresAt); err != nil {
+	if err := c.db.QueryRow(ctx, "SELECT access_token, refresh_token, expires FROM patreon_keys2").Scan(&accessToken, &refreshToken, &expiresAt); err != nil {
 		c.logger.Error("Invalid access token or refresh token")
 		return err
 	}
