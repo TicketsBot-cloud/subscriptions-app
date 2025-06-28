@@ -30,7 +30,7 @@ const UserAgent = "tickets.bot/subscriptions-app (https://github.com/TicketsBot/
 func NewClient(config config.Config, logger *zap.Logger, pool *pgxpool.Pool) *Client {
 	// Get initial tokens from the database
 	var tokens Tokens
-	if err := pool.QueryRow(context.Background(), "SELECT access_token, refresh_token, expires_at FROM patreon_keys WHERE client_id = $1", config.Patreon.ClientId).Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT access_token, refresh_token, expires FROM patreon_keys WHERE client_id = $1", config.Patreon.ClientId).Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt); err != nil {
 		if err != pgx.ErrNoRows {
 			logger.Error("Failed to get Patreon keys from database", zap.Error(err))
 			return nil
@@ -117,7 +117,7 @@ func (c *Client) RefreshCredentials(ctx context.Context) error {
 	}
 
 	// Update db
-	if _, err := c.db.Exec(ctx, "UPDATE patreon_keys SET access_token = $1, refresh_token = $2, expires_at = $3 WHERE client_id = $4", c.Tokens.AccessToken, c.Tokens.RefreshToken, c.Tokens.ExpiresAt, c.config.Patreon.ClientId); err != nil {
+	if _, err := c.db.Exec(ctx, "UPDATE patreon_keys SET access_token = $1, refresh_token = $2, expires = $3 WHERE client_id = $4", c.Tokens.AccessToken, c.Tokens.RefreshToken, c.Tokens.ExpiresAt, c.config.Patreon.ClientId); err != nil {
 		c.logger.Error("Failed to update Patreon keys in database", zap.Error(err))
 		return fmt.Errorf("failed to update Patreon keys in database: %w", err)
 	}
