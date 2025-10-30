@@ -127,7 +127,7 @@ func (c *Client) RefreshCredentials(ctx context.Context) error {
 
 func (c *Client) FetchPledges(ctx context.Context) (map[string]Patron, error) {
 	url := fmt.Sprintf(
-		"https://www.patreon.com/api/oauth2/v2/campaigns/%d/members?include=currently_entitled_tiers,user&fields%%5Bmember%%5D=last_charge_date,last_charge_status,patron_status,email,pledge_relationship_start&fields%%5Buser%%5D=social_connections",
+		"https://www.patreon.com/api/oauth2/v2/campaigns/%d/members?include=currently_entitled_tiers,user&page[count]=1000&fields%%5Bmember%%5D=last_charge_date,last_charge_status,patron_status,email,pledge_relationship_start&fields%%5Buser%%5D=social_connections",
 		c.config.Patreon.CampaignId,
 	)
 
