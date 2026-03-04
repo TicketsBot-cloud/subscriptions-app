@@ -15,13 +15,13 @@ var commands = []rest.CreateCommandData{
 		Description: "Look up information about a user's subscription",
 		Options: []interaction.ApplicationCommandOption{
 			{
-				Type:        interaction.OptionTypeString,
+				Type:        interaction.ApplicationCommandOptionTypeString,
 				Name:        "email",
 				Description: "The Patreon email address of the user to lookup",
 				Required:    false,
 			},
 			{
-				Type:        interaction.OptionTypeUser,
+				Type:        interaction.ApplicationCommandOptionTypeUser,
 				Name:        "user",
 				Description: "The Discord Id of the user to lookup",
 				Required:    false,
