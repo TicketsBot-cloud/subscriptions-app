@@ -140,8 +140,8 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 		}
 
 		var user user.User
-		if data.Member != nil {
-			user = data.Member.User
+		if data.Member != nil && data.Member.User != nil {
+			user = *data.Member.User
 		} else if data.User != nil {
 			user = *data.User
 		} // Other should be infallible
