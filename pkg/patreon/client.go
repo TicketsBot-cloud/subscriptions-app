@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -85,7 +85,7 @@ func (c *Client) RefreshCredentials(ctx context.Context) error {
 
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			c.logger.Error(
 				"error reading body of oauth response",
@@ -224,7 +224,7 @@ func (c *Client) FetchPage(ctx context.Context, url string) (PledgeResponse, err
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			c.logger.Error(
 				"error reading body of pledge response",
