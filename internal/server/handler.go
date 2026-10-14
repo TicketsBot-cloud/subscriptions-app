@@ -108,7 +108,7 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 							Title:       "Account Not Found",
 							Description: fmt.Sprintf("No Patreon account with id `%d` found", userId),
 							Timestamp:   ptr(time.Now()),
-							Color:       red,
+							Color:       ptr(red),
 						},
 					},
 				})
@@ -132,7 +132,7 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 							Title:       "Account Not Found",
 							Description: fmt.Sprintf("No Patreon account with email `%s` found", email),
 							Timestamp:   ptr(time.Now()),
-							Color:       red,
+							Color:       ptr(red),
 						},
 					},
 				})
@@ -167,7 +167,7 @@ func handleCommand(s *Server, data interaction.ApplicationCommandInteraction) in
 					Title:     "Account Found",
 					Url:       fmt.Sprintf("https://www.patreon.com/user?u=%d", patron.Id),
 					Timestamp: ptr(time.Now()),
-					Color:     blue,
+					Color:     ptr(blue),
 					Author: &embed.EmbedAuthor{
 						Name:    user.Username,
 						IconUrl: user.AvatarUrl(256),
