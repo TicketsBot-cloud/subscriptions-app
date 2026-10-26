@@ -4,8 +4,10 @@ go 1.22.0
 
 toolchain go1.24.2
 
+// replace github.com/TicketsBot-cloud/gdl => ../gdl
+
 require (
-	github.com/TicketsBot-cloud/gdl v0.0.0-20250509054940-2045fbe19c06
+	github.com/TicketsBot-cloud/gdl v0.0.0-20261022191043-9caa827c743a
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/getsentry/sentry-go v0.31.1
 	github.com/gin-contrib/zap v0.1.0
